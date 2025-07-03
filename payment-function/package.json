@@ -1,0 +1,13 @@
+{
+  "name": "stripe-connect-payment",
+  "version": "1.0.0",
+  "description": "Google Cloud Function for Stripe Connect payments",
+  "main": "index.js",
+  "dependencies": {
+    "@google-cloud/secret-manager": "^5.0.0",
+    "stripe": "^15.0.0"
+  },
+  "engines": {
+    "node": "18"
+  }
+}
