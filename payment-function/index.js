@@ -5,16 +5,20 @@ const secretManagerClient = new SecretManagerServiceClient();
 
 // Function to securely get the Stripe Secret Key from Google Cloud Secret Manager
 async function getStripeSecretKey() {
-  // Define the secretPath variable here
   const secretPath = `projects/${process.env.GCP_PROJECT}/secrets/stripe-secret-key/versions/latest`;
 
   // Temporary log to see the exact path being accessed (REMOVE THIS LINE LATER AFTER DEBUGGING)
   console.log(`Attempting to access secret at: ${secretPath}`);
 
-  const [version] = await secretManagerClient.accessSecretVersion({
-    name: secretPath, // Use the defined secretPath variable
-  });
-  return version.payload.data.toString('utf8');
+  try {
+    const [version] = await secretManagerClient.accessSecretVersion({
+      name: secretPath, // Use the defined secretPath variable
+    });
+    return version.payload.data.toString('utf8');
+  } catch (error) {
+    console.error(`Error accessing secret in getStripeSecretKey: ${error.message}`);
+    throw new Error(`Failed to retrieve Stripe Secret Key: ${error.message}`);
+  }
 }
 
 let stripeInstance; // To store the initialized Stripe instance once retrieved
@@ -39,35 +43,53 @@ exports.processConnectPayment = async (req, res) => {
   }
 
   try {
+    // Extract raw values from the request body
+    const {
+      amount: rawAmount,
+      currency,
+      paymentMethodId,
+      connectedAccountId,
+      applicationFeeAmount: rawApplicationFeeAmount
+    } = req.body;
+
+    // --- Robust explicit conversion and validation ---
+    // Convert amount and applicationFeeAmount to numbers
+    const amount = parseInt(rawAmount, 10);
+    const applicationFeeAmount = parseInt(rawApplicationFeeAmount, 10);
+
+    // Debug logs (REMOVE THESE LINES AFTER SUCCESSFUL DEPLOYMENT AND TESTING)
+    console.log(`Received rawAmount: ${rawAmount}, type: ${typeof rawAmount}`);
+    console.log(`Received amount (converted): ${amount}, type: ${typeof amount}`);
+    console.log(`Received rawApplicationFeeAmount: ${rawApplicationFeeAmount}, type: ${typeof rawApplicationFeeAmount}`);
+    console.log(`Received applicationFeeAmount (converted): ${applicationFeeAmount}, type: ${typeof applicationFeeAmount}`);
+    console.log(`Using paymentMethodId: ${paymentMethodId}`);
+    console.log(`Using connectedAccountId: ${connectedAccountId}`);
+    console.log(`Using currency: ${currency}`);
+    // --- END DEBUG LOGS ---
+
     // Initialize Stripe instance if not already initialized
     if (!stripeInstance) {
       const stripeSecretKey = await getStripeSecretKey();
       stripeInstance = stripe(stripeSecretKey);
     }
 
-    // Extract necessary payment details from the request body sent by Adalo
-    const {
-      amount, // Total amount to charge the buyer (in cents, e.g., 1000 for $10.00)
-      currency, // e.g., 'usd'
-      paymentMethodId, // Tokenized payment method from Stripe.js (collected in Adalo's Web View)
-      connectedAccountId, // The Stripe Account ID of the service provider
-      applicationFeeAmount // Your platform's fee (in cents, e.g., 100 for $1.00)
-    } = req.body;
+    // --- RESTORED VALIDATION CHECKS ---
+    // Validate if conversion resulted in NaN or if required parameters are missing
+    if (isNaN(amount) || isNaN(applicationFeeAmount) || !currency || !paymentMethodId || !connectedAccountId || applicationFeeAmount === undefined) {
+      console.error('Validation Error: Missing or invalid required payment parameters.');
+      return res.status(400).send({ error: 'Missing or invalid required payment parameters. Ensure amount, currency, paymentMethodId, connectedAccountId, and applicationFeeAmount are provided and valid numbers.' });
+    }
 
-    // Basic validation
-    if (!amount || !currency || !paymentMethodId || !connectedAccountId || applicationFeeAmount === undefined) {
-      return res.status(400).send({ error: 'Missing required payment parameters.' });
-    }
-    if (typeof amount !== 'number' || typeof applicationFeeAmount !== 'number') {
-        return res.status(400).send({ error: 'Amount and applicationFeeAmount must be numbers (in cents).' });
-    }
+    // Validate numerical values
     if (amount <= 0 || applicationFeeAmount < 0) {
+        console.error('Validation Error: Amount must be positive, applicationFeeAmount cannot be negative.');
         return res.status(400).send({ error: 'Amount must be positive, applicationFeeAmount cannot be negative.' });
     }
-    // Corrected validation: applicationFeeAmount can be 0, but not greater than total amount
-    if (applicationFeeAmount > amount) { // Changed from >= to >
+    if (applicationFeeAmount > amount) {
+        console.error('Validation Error: Application fee cannot be greater than the total amount.');
         return res.status(400).send({ error: 'Application fee cannot be greater than the total amount.' });
     }
+    // --- END RESTORED VALIDATION CHECKS ---
 
 
     // Create a Payment Intent on your platform account
@@ -83,9 +105,10 @@ exports.processConnectPayment = async (req, res) => {
       transfer_data: {
         destination: connectedAccountId, // The service provider's Stripe account
       },
-      // automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
-      // The above line is helpful for future payment methods, but for cards,
-      // `confirm: true` handles the flow. Remove if it causes issues.
+      automatic_payment_methods: {
+        enabled: true,
+        allow_redirects: 'never' // This tells Stripe not to try redirecting for this PaymentIntent
+      }
     });
 
     // Respond to Adalo with success or failure details
