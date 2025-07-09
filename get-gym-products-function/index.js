@@ -39,6 +39,12 @@ exports.getGymProducts = async (req, res) => { // <-- Note the camelCase here
 
   } catch (error) {
     console.error('Error retrieving gym products:', error);
-    res.status(500).send({ error: 'Failed to retrieve products.' });
+    // --- TEMPORARY: Return full error for debugging ---
+    res.status(500).json({
+      error: 'Failed to retrieve products.',
+      details: error.message, // Send the error message
+      stack: error.stack // Send the stack trace for full details
+    });
+    // --- END TEMPORARY ---
   }
 };
