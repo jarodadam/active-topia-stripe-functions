@@ -1,10 +1,14 @@
 const { Firestore } = require('@google-cloud/firestore');
-const firestore = new Firestore(); // Initializes Firestore client
 
-exports.getGymProducts = async (req, res) => { // <-- Note the camelCase here
+// Explicitly connect to the default Firestore database
+const firestore = new Firestore({
+  databaseId: '(default)' // This is the correct Database ID to use
+});
+
+exports.getGymProducts = async (req, res) => {
   // Set CORS headers to allow requests from your Firebase Hosted shop.html
   // REPLACE THIS WITH YOUR ACTUAL FIREBASE HOSTING URL (e.g., https://your-project-id.web.app)
-  res.set('Access-Control-Allow-Origin', 'https://activetopia-stripe-backe-9690d.web.app'); // <--- IMPORTANT: UPDATE THIS!
+  res.set('Access-Control-Allow-Origin', 'https://activetopia-stripe-backe-9690d.web.app'); // <--- UPDATED!
   res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.set('Access-Control-Allow-Headers', 'Content-Type');
 
@@ -39,12 +43,7 @@ exports.getGymProducts = async (req, res) => { // <-- Note the camelCase here
 
   } catch (error) {
     console.error('Error retrieving gym products:', error);
-    // --- TEMPORARY: Return full error for debugging ---
-    res.status(500).json({
-      error: 'Failed to retrieve products.',
-      details: error.message, // Send the error message
-      stack: error.stack // Send the stack trace for full details
-    });
-    // --- END TEMPORARY ---
+    // Clean, production-ready error response
+    res.status(500).send({ error: 'Failed to retrieve products.' });
   }
 };

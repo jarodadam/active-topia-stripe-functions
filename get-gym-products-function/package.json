@@ -4,7 +4,7 @@
   "description": "Google Cloud Function to retrieve products for a gym from Firestore",
   "main": "index.js",
   "dependencies": {
-    "@google-cloud/firestore": "^7.0.0"
+    "@google-cloud/firestore": "^7.1.0"
   },
   "engines": {
     "node": "18"
