@@ -15,7 +15,8 @@ let stripeInstance; // To store the initialized Stripe instance once retrieved
 
 /**
  * HTTP Cloud Function to initiate the Stripe Connect onboarding process.
- * This function generates the Stripe OAuth URL that the user will be redirected to.
+ * This function now ONLY generates the BASE Stripe OAuth URL.
+ * The userId (state parameter) will be added by Adalo's "Link to Website" action.
  *
  * @param {object} req Cloud Function request object.
  * @param {object} res Cloud Function response object.
@@ -39,23 +40,28 @@ exports.stripeConnectOnboarding = async (req, res) => {
       stripeInstance = stripe(stripeSecretKey);
     }
 
-    // Get the userId from Adalo (passed as a query parameter or body parameter)
-    // This userId helps you associate the connected Stripe account back to your Adalo user.
-    const { userId } = req.query; // Assuming Adalo passes it as a query parameter
+    // --- IMPORTANT: userId validation removed from here ---
+    // This function will now ONLY return the base Stripe URL.
+    // The userId (state) will be added by Adalo's "Link to Website" action.
 
-    if (!userId) {
-      return res.status(400).send('Missing userId query parameter.');
+    // Ensure your environment variables are correctly set for the Cloud Function.
+    const clientId = process.env.STRIPE_CLIENT_ID;
+    const redirectUri = process.env.STRIPE_REDIRECT_URI;
+
+    if (!clientId || !redirectUri) {
+        console.error('Missing Stripe Client ID or Redirect URI environment variables.');
+        return res.status(500).send('Server configuration error: Missing Stripe credentials.');
     }
 
-    // Construct the Stripe Connect OAuth URL
-    // IMPORTANT:
-    // - Replace `process.env.STRIPE_CLIENT_ID` with your actual Stripe Connect Client ID.
-    // - Replace `process.env.STRIPE_REDIRECT_URI` with the URL of your deployed `stripeOAuthRedirect` function.
-    // - `state` parameter is used by Stripe to return your `userId` back to your redirect function securely.
-    const onboardingUrl = `https://connect.stripe.com/oauth/authorize?response_type=code&client_id=${process.env.STRIPE_CLIENT_ID}&scope=read_write&state=${userId}&redirect_uri=${process.env.STRIPE_REDIRECT_URI}`;
+    // Construct the BASE Stripe Connect OAuth URL (without the 'state' parameter for now)
+    const onboardingUrl = `https://connect.stripe.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=read_write&redirect_uri=${redirectUri}`;
 
-    // Respond with the onboarding URL. Adalo's Web View will then open this URL.
-    res.status(200).send({ onboardingUrl });
+    // Log the generated URL for debugging (useful for Cloud Function logs)
+    console.log(`Generated base Stripe URL for Adalo: ${onboardingUrl}`);
+    console.log("CONFIRMED: Deployed new version without userId check."); // <<< ADDED THIS UNIQUE LINE FOR VERIFICATION
+
+    // Respond with the base onboarding URL. Adalo's "Link to Website" will then append the userId.
+    res.status(200).json({ onboardingUrl }); // Use .json() to send JSON response
 
   } catch (error) {
     console.error('Error in Stripe Connect onboarding function:', error);
