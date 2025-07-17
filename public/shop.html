@@ -138,7 +138,7 @@
 
     <script>
         // --- Configuration ---
-        const STRIPE_PUBLISHABLE_KEY = 'pk_test_51QBDrBGocrBcC7Ju2fFeha08J65wcuCREqqxVOBCOZ51IyhEyzKz62QJXVZopymtuTbvRwj86cRCNyAeHw1MsaYs00zpLybrPv'; // Your Stripe Publishable Key
+        const STRIPE_PUBLISHABLE_KEY = 'pk_test_51QBDrBGocrBcC7Ju2fFeha08J65wcuCREqqxVOBCOZ51IyhEyzKz62QJXVZopymtuTb0Rwj86cRCNyAeHw1MsaYs00zpLybrPv'; // Your Stripe Publishable Key
 
         // Your Cloud Function URLs
         const PROCESS_PAYMENT_FUNCTION_URL = 'https://us-central1-activetopia-stripe-backend.cloudfunctions.net/processConnectPayment';
@@ -312,9 +312,9 @@
                     throw new Error(result.error || 'Failed to initiate checkout.');
                 }
 
-                // Redirect to Stripe Checkout URL provided by Cloud Function
-                // adaloAppUrl is now available from URL parameters
-                window.location.href = result.checkoutUrl;
+                // REDIRECT TO STRIPE CHECKOUT URL
+                // THIS IS THE LINE TO CHANGE:
+                window.location.href = result.url; // Changed from result.checkoutUrl to result.url
 
             } catch (error) {
                 console.error('Checkout initiation error:', error);
