@@ -1,0 +1,14 @@
+{
+  "name": "test-secret-access-function",
+  "version": "1.0.0",
+  "description": "Cloud Function for testing secret access.",
+  "main": "index.js",
+  "dependencies": {
+    "firebase-functions": "^4.0.0",
+    "@google-cloud/secret-manager": "^5.0.0"
+  },
+  "engines": {
+    "node": "18"
+  },
+  "private": true
+}

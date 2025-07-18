@@ -1,0 +1,15 @@
+{
+  "name": "google-oauth-callback-function",
+  "version": "1.0.0",
+  "description": "Cloud Function for Google OAuth Callback.",
+  "main": "index.js",
+  "dependencies": {
+    "firebase-functions": "^4.0.0",
+    "axios": "^1.6.0",
+    "firebase-admin": "^12.0.0"
+  },
+  "engines": {
+    "node": "18"
+  },
+  "private": true
+}

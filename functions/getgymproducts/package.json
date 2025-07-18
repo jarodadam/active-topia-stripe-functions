@@ -1,0 +1,15 @@
+{
+  "name": "get-gym-products-function",
+  "version": "1.0.0",
+  "description": "Cloud Function for retrieving gym products from Firestore.",
+  "main": "index.js",
+  "dependencies": {
+    "firebase-functions": "^4.0.0",
+    "firebase-admin": "^12.0.0",
+    "@google-cloud/firestore": "^4.0.0"
+  },
+  "engines": {
+    "node": "18"
+  },
+  "private": true
+}

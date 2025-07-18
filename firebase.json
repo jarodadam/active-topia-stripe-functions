@@ -1,19 +1,48 @@
 {
+  "functions": [
+    {
+      "source": "functions/getgymproducts",
+      "name": "getgymproducts",
+      "runtime": "nodejs20",
+      "codebase": "getgymproducts"
+    },
+    {
+      "source": "functions/googleoauthcallback",
+      "name": "googleoauthcallback",
+      "runtime": "nodejs20",
+      "codebase": "googleoauthcallback"
+    },
+    {
+      "source": "functions/stripeconnectonboarding",
+      "name": "stripeconnectonboarding",
+      "runtime": "nodejs20",
+      "codebase": "stripeconnectonboarding"
+    },
+    {
+      "source": "functions/stripeoauthredirect",
+      "name": "stripeoauthredirect",
+      "runtime": "nodejs20",
+      "codebase": "stripeoauthredirect"
+    },
+    {
+      "source": "functions/testsecretaccess",
+      "name": "testsecretaccess",
+      "runtime": "nodejs20",
+      "codebase": "testsecretaccess"
+    }
+  ],
   "hosting": {
     "public": "public",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
     ]
-  },
-  "functions": {
-    "source": "functions",
-    "runtime": "nodejs18" // Ensure this matches your Node.js version
-  },
-  "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
   }
-  // ... other sections if you have them
 }
