@@ -5,31 +5,15 @@
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
-    ],
-    "headers": [
-      {
-        "source": "**",
-        "headers": [
-          {
-            "key": "Access-Control-Allow-Origin",
-            "value": "https://app.adalo.com"
-          },
-          {
-            "key": "Access-Control-Allow-Methods",
-            "value": "GET,HEAD,PUT,PATCH,POST,DELETE"
-          },
-          {
-            "key": "Access-Control-Allow-Headers",
-            "value": "Content-Type, Authorization"
-          }
-        ]
-      }
     ]
   },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs18" // Ensure this matches your Node.js version
+  },
   "firestore": {
-    "database": "(default)",
-    "location": "us-east1",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   }
+  // ... other sections if you have them
 }
