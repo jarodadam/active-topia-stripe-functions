@@ -66,12 +66,20 @@ exports.stripeOAuthRedirect = functions.https.onRequest(async (req, res) => {
         // 1. Extract state (Adalo User ID) and authorization_code from req.query
         const { state, code } = req.query;
 
-        if (!state || !code) {
-            console.error('Missing state or code in Stripe OAuth redirect.');
-            return res.status(400).send('Missing code or code in redirect.');
+        // --- TEMPORARY DEBUGGING MODIFICATION START ---
+        // In production, 'state' IS REQUIRED to link the Stripe account to the Adalo user.
+        // This temporary change allows the function to proceed even if Adalo fails to pass 'state'.
+        if (!code) {
+            console.error('Missing code in Stripe OAuth redirect.');
+            return res.status(400).send('Missing code in redirect.');
         }
 
-        const adaloUserId = state; // Assuming 'state' directly contains the Adalo User ID
+        // Assign a placeholder if state is missing, but log a warning.
+        const adaloUserId = state || 'UNKNOWN_ADALO_USER_FOR_TEST';
+        if (!state) {
+            console.warn('WARNING: State parameter is missing. Adalo user ID will be UNKNOWN for this test.');
+        }
+        // --- TEMPORARY DEBUGGING MODIFICATION END ---
 
         // Initialize Stripe instance if not already initialized
         if (!stripeInstance) {

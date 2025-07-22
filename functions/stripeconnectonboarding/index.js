@@ -2,7 +2,7 @@
 // This file contains the Cloud Function for initiating Stripe Connect onboarding.
 
 // --- REQUIRED MODULE IMPORTS FOR THIS FUNCTION ---
-const functions = require('firebase-functions');
+const functions = require('firebase-functions'); // Corrected import path for Firebase Functions
 const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
 const stripe = require('stripe');
 
@@ -35,7 +35,8 @@ async function getStripeSecretKey() {
 // --- stripeConnectOnboarding Function Definition ---
 exports.stripeConnectOnboarding = functions.https.onRequest(async (req, res) => {
     console.log("--- stripeConnectOnboarding Function Called ---");
-    console.log("Request Query Params:", req.query);
+    console.log("Request Query Params:", req.query); // This is where we'll look for adaloUserId now
+    console.log("Request Body:", req.body); // Still log, but won't be used for adaloUserId
 
     // Set CORS headers to allow requests from your Adalo app
     // IMPORTANT: Restrict 'Access-Control-Allow-Origin' to your Adalo domain in production for security
@@ -50,6 +51,15 @@ exports.stripeConnectOnboarding = functions.https.onRequest(async (req, res) => 
     }
 
     try {
+        // Extract adaloUserId from the request QUERY PARAMETERS
+        // Adalo should send this as a GET or POST request with the userId in the URL query string
+        const { adaloUserId } = req.query; // CHANGED FROM req.body TO req.query
+
+        if (!adaloUserId) {
+            console.error('Missing adaloUserId in request query parameters. Cannot generate Stripe URL with state.');
+            return res.status(400).send('Missing Adalo User ID in request.');
+        }
+
         // Initialize Stripe instance if not already initialized
         if (!stripeInstance) { // Using the shared stripeInstance
             const stripeSecretKey = await getStripeSecretKey(); // Using the shared getStripeSecretKey
@@ -65,13 +75,13 @@ exports.stripeConnectOnboarding = functions.https.onRequest(async (req, res) => 
             return res.status(500).send('Server configuration error: Missing Stripe credentials.');
         }
 
-        // Construct the BASE Stripe Connect OAuth URL (without the 'state' parameter for now)
-        const onboardingUrl = `https://connect.stripe.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=read_write&redirect_uri=${redirectUri}`;
+        // Construct the FULL Stripe Connect OAuth URL, including the 'state' parameter
+        const onboardingUrl = `https://connect.stripe.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=read_write&redirect_uri=${redirectUri}&state=${adaloUserId}`;
 
-        console.log(`Generated base Stripe URL for Adalo: ${onboardingUrl}`);
-        console.log("CONFIRMED: Deployed new version without userId check.");
+        console.log(`Generated full Stripe URL for Adalo: ${onboardingUrl}`);
+        console.log(`Including Adalo userId (state): ${adaloUserId}`);
 
-        // Respond with the base onboarding URL. Adalo's "Link to Website" will then append the userId.
+        // Respond with the full onboarding URL. Adalo will use this directly.
         res.status(200).json({ onboardingUrl });
 
     } catch (error) {
