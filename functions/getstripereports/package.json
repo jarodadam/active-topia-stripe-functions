@@ -1,0 +1,15 @@
+{
+  "name": "getstripereports",
+  "version": "1.0.0",
+  "description": "Cloud Function to securely fetch Stripe reporting data for connected accounts.",
+  "main": "index.js",
+  "dependencies": {
+    "@google-cloud/secret-manager": "^5.0.0",
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^4.0.0",
+    "stripe": "^16.0.0"
+  },
+  "engines": {
+    "node": "20"
+  }
+}
