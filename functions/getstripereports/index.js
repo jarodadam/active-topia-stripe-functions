@@ -5,7 +5,7 @@
 const functions = require('firebase-functions');
 const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
 const stripe = require('stripe');
-const admin = require('firebase-admin'); // For Firebase Authentication
+const admin = require('firebase-admin'); // For Firebase Authentication and Firestore
 
 // --- Initialize Firebase Admin SDK (must be called only once per function instance) ---
 // Ensure this is initialized only once across your Cloud Function instances
@@ -50,8 +50,8 @@ exports.getStripeReports = functions.https.onRequest(async (req, res) => {
     // In production, you would maintain a list of allowed client domains.
     // For testing, '*' is used, but it's INSECURE for production.
     const allowedOrigins = [
-        'https://clientA.yourdomain.com', // Example client app domain
-        'https://clientB.yourdomain.com', // Example client app domain
+        // 'https://clientA.yourdomain.com', // Example client app domain
+        // 'https://clientB.yourdomain.com', // Example client app domain
         // Add all your white-labeled app domains here
         // For local development/testing, you might need to add 'http://localhost:XXXX'
     ];
@@ -75,8 +75,7 @@ exports.getStripeReports = functions.https.onRequest(async (req, res) => {
     }
 
     try {
-        // --- Authentication and Authorization (CRUCIAL for Security) ---
-        // 1. Authenticate the user: Verify the Firebase ID token from the client-side app.
+        // --- Authentication (Firebase ID Token Verification) ---
         const idToken = req.headers.authorization ? req.headers.authorization.split('Bearer ')[1] : null;
         if (!idToken) {
             console.error('Authentication Error: No ID token provided.');
@@ -86,7 +85,7 @@ exports.getStripeReports = functions.https.onRequest(async (req, res) => {
         let decodedToken;
         try {
             decodedToken = await admin.auth().verifyIdToken(idToken);
-            console.log(`Authenticated user: ${decodedToken.uid}`);
+            console.log(`Authenticated user UID: ${decodedToken.uid}`);
         } catch (authError) {
             console.error('Authentication Error: Invalid ID token.', authError);
             return res.status(401).json({ error: 'Unauthorized: Invalid authentication token.' });
@@ -106,50 +105,144 @@ exports.getStripeReports = functions.https.onRequest(async (req, res) => {
             return res.status(400).json({ error: 'Missing Stripe Account ID.' });
         }
 
-        // 2. Authorize the user: Ensure the authenticated user is allowed to view this stripeAccountId's data.
-        // This is a placeholder. You need to implement YOUR OWN logic here.
-        // Example: Fetch the user's record from Firestore and check if their associated
-        // Gym Owners Stripe Account ID matches the requested stripeAccountId.
-        // For example, if you store user's stripeAccountId in their Adalo user record or a related collection.
-        // const userDoc = await admin.firestore().collection('users').doc(decodedToken.uid).get();
-        // const userStripeAccountId = userDoc.data()?.stripeAccountId; // Assuming you store it here
+        // --- Authorization (CRITICAL for Multi-Client Security) ---
+        // Verify that the authenticated user (decodedToken.uid) is authorized to view this stripeAccountId's data.
+        // This queries your Firestore database (where Adalo stores its data) to find a matching record.
 
-        // if (userStripeAccountId !== stripeAccountId) {
-        //     console.error(`Authorization Error: User ${decodedToken.uid} attempted to access unauthorized Stripe account ${stripeAccountId}.`);
-        //     return res.status(403).json({ error: 'Forbidden: You are not authorized to view this account.' });
-        // }
-        // console.log(`Authorization successful for user ${decodedToken.uid} to access ${stripeAccountId}.`);
+        const firestore = admin.firestore(); // Get Firestore instance
+
+        // Query the "Gym Owners Stripe Accounts" collection
+        // Replace 'Gym Owners Stripe Accounts' with the EXACT name of your collection in Firestore.
+        // Replace 'Stripe Account ID' with the EXACT field name in your collection that stores the Stripe Account ID.
+        // Replace 'User' with the EXACT field name in your collection that represents the relationship to the User collection.
+        const gymStripeAccountQuery = await firestore.collection('Gym Owners Stripe Accounts')
+                                                     .where('Stripe Account ID', '==', stripeAccountId)
+                                                     .where('User', '==', decodedToken.uid) // Assuming 'User' is the relationship field storing the Adalo User ID (which matches decodedToken.uid)
+                                                     .limit(1)
+                                                     .get();
+
+        if (gymStripeAccountQuery.empty) {
+            console.error(`Authorization Error: User ${decodedToken.uid} attempted to access unauthorized or non-existent Stripe account ${stripeAccountId}.`);
+            return res.status(403).json({ error: 'Forbidden: You are not authorized to view this account.' });
+        }
+        console.log(`Authorization successful for user ${decodedToken.uid} to access ${stripeAccountId}.`);
 
 
         console.log(`Fetching reports for connected account: ${stripeAccountId}`);
 
-        // --- Fetch Stripe Data ---
-        // Example: Fetching a list of charges for the connected account
-        const charges = await stripeInstance.charges.list(
-            { limit: 10 }, // Adjust limit as needed, implement pagination for large datasets
-            { stripeAccount: stripeAccountId } // CRUCIAL for Connect platforms
-        );
+        // --- Fetch Stripe Data & Aggregations ---
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const startOfYear = new Date(now.getFullYear(), 0, 1);
 
-        // Example: Fetching a list of payouts for the connected account
-        const payouts = await stripeInstance.payouts.list(
-            { limit: 10 }, // Adjust limit as needed
+        // Convert dates to Unix timestamps (seconds) for Stripe API
+        const nowTimestamp = Math.floor(now.getTime() / 1000);
+        const startOfMonthTimestamp = Math.floor(startOfMonth.getTime() / 1000);
+        const startOfYearTimestamp = Math.floor(startOfYear.getTime() / 1000);
+
+        // --- Helper to fetch all paginated charges ---
+        async function fetchAllCharges(stripeAccountId, createdGte, createdLte) {
+            let allCharges = [];
+            let hasMore = true;
+            let lastChargeId = null;
+
+            while (hasMore) {
+                const params = {
+                    limit: 100, // Fetch 100 at a time
+                    created: { gte: createdGte, lte: createdLte },
+                    expand: ['customer'] // Expand customer object to get email for new/returning logic
+                };
+                if (lastChargeId) {
+                    params.starting_after = lastChargeId;
+                }
+
+                const chargesPage = await stripeInstance.charges.list(params, { stripeAccount: stripeAccountId });
+                allCharges = allCharges.concat(chargesPage.data);
+                hasMore = chargesPage.has_more;
+                if (hasMore && chargesPage.data.length > 0) {
+                    lastChargeId = chargesPage.data[chargesPage.data.length - 1].id;
+                } else {
+                    hasMore = false; // Ensure loop terminates if no data on last page
+                }
+            }
+            return allCharges;
+        }
+
+        // Fetch charges for MTD and YTD
+        const mtdCharges = await fetchAllCharges(stripeAccountId, startOfMonthTimestamp, nowTimestamp);
+        const ytdCharges = await fetchAllCharges(stripeAccountId, startOfYearTimestamp, nowTimestamp);
+
+        // Fetch recent payouts and balance (as before)
+        const recentPayouts = await stripeInstance.payouts.list(
+            { limit: 10 },
             { stripeAccount: stripeAccountId }
         );
-
-        // Example: Fetching the balance for the connected account
         const balance = await stripeInstance.balance.retrieve(
             { stripeAccount: stripeAccountId }
         );
 
+        // --- Aggregations ---
+        // Total Revenue (MTD & YTD)
+        const totalRevenueMTD = mtdCharges.filter(c => c.paid && !c.refunded).reduce((sum, charge) => sum + charge.amount, 0);
+        const totalRevenueYTD = ytdCharges.filter(c => c.paid && !c.refunded).reduce((sum, charge) => sum + charge.amount, 0);
 
-        console.log("Successfully fetched Stripe data.");
+        // Total Transactions (MTD & YTD)
+        const totalTransactionsMTD = mtdCharges.filter(c => c.paid).length;
+        const totalTransactionsYTD = ytdCharges.filter(c => c.paid).length;
 
-        // Respond with the fetched data
+        // Refunds Amount (MTD & YTD)
+        const refundsAmountMTD = mtdCharges.filter(c => c.refunded).reduce((sum, charge) => sum + charge.amount_refunded, 0);
+        const refundsAmountYTD = ytdCharges.filter(c => c.refunded).reduce((sum, charge) => sum + charge.amount_refunded, 0);
+
+        // Average Transaction Value (MTD & YTD)
+        const averageTransactionValueMTD = totalTransactionsMTD > 0 ? totalRevenueMTD / totalTransactionsMTD : 0;
+        const averageTransactionValueYTD = totalTransactionsYTD > 0 ? totalRevenueYTD / totalTransactionsYTD : 0;
+
+        // Customer Counts (New/Returning - basic logic, can be refined)
+        const allCustomerEmails = ytdCharges.filter(c => c.customer && c.customer.email).map(c => c.customer.email);
+        const uniqueCustomerEmails = new Set(allCustomerEmails);
+        const totalCustomers = uniqueCustomerEmails.size;
+
+        // For new/returning, you'd typically need to query customer objects directly or rely on metadata/timestamps.
+        // This is a simplified approach assuming 'customer.created' is reliable for 'new' within the period.
+        // For more accurate new/returning, you'd fetch customer objects and check created dates.
+        const newCustomersMTD = mtdCharges.filter(c => c.customer && Math.floor(c.customer.created * 1000) >= startOfMonth.getTime()).length; // Simplified
+        const returningCustomersMTD = totalCustomers - newCustomersMTD; // Simplified
+
+        // Transaction Fees (Stripe does not expose this directly per charge via API list, requires balance transactions or webhooks)
+        // For this, you'd typically sum fees from balance transactions or rely on webhooks.
+        // Placeholder for now, as it's complex to aggregate accurately from charges.list
+        const totalTransactionFeesMTD = 0; // Requires fetching Balance Transactions or parsing webhooks
+        const totalTransactionFeesYTD = 0; // Requires fetching Balance Transactions or parsing webhooks
+
+
+        console.log("Successfully aggregated Stripe data.");
+
+        // Respond with the fetched and aggregated data
         res.status(200).json({
-            charges: charges.data,
-            payouts: payouts.data,
+            // Raw data
+            recentCharges: mtdCharges.slice(0, 10), // Still return recent 10 for display
+            recentPayouts: recentPayouts.data,
             balance: balance,
-            stripeAccountId: stripeAccountId // Echo back the account ID for client-side verification
+            stripeAccountId: stripeAccountId,
+
+            // Aggregated data
+            reportDate: now.toISOString().split('T')[0], // Current date for the report
+            currentMTDRevenue: totalRevenueMTD,
+            currentYTDRevenue: totalRevenueYTD,
+            totalTransactionsMTD: totalTransactionsMTD,
+            totalTransactionsYTD: totalTransactionsYTD,
+            averageTransactionValueMTD: averageTransactionValueMTD,
+            averageTransactionValueYTD: averageTransactionValueYTD,
+            refundsAmountMTD: refundsAmountMTD,
+            refundsAmountYTD: refundsAmountYTD,
+            totalCustomers: totalCustomers,
+            newCustomersMTD: newCustomersMTD,
+            returningCustomersMTD: returningCustomersMTD,
+            totalTransactionFeesMTD: totalTransactionFeesMTD,
+            totalTransactionFeesYTD: totalTransactionFeesYTD,
+            // You can add previous_mtd, mtd_comparison_value, mtd_comparison_percent
+            // by fetching previous month's data and calculating
         });
 
     } catch (error) {
