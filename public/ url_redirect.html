@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Redirecting to Reports...</title>
+    <script type="text/javascript">
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            // Get the account ID passed from Adalo (we're calling it 'accountId' here)
+            const stripeAccountId = urlParams.get('accountId');
+
+            if (stripeAccountId) {
+                // Construct the FINAL URL for reports.html with the correct parameter name and raw value
+                const finalReportsUrl = `https://activetopia-stripe-backe-9690d.web.app/reports.html?stripeAccountId=${stripeAccountId}`;
+                window.location.replace(finalReportsUrl);
+            } else {
+                // Handle cases where stripeAccountId is missing (optional: redirect to an error page or show a message)
+                console.error("Stripe Account ID not found in URL for redirect.");
+                // You might want to redirect to a generic error page, or your app's home screen
+                window.location.replace("https://activetopia-stripe-backe-9690d.web.app/error.html"); // Or your index.html
+            }
+        };
+    </script>
+</head>
+<body>
+    <p>If you are not redirected automatically, <a id="redirectLink" href="#">click here</a>.</p>
+    <script>
+        // Fallback for very old browsers or if JS fails to execute onload
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const stripeAccountId = urlParams.get('accountId');
+            if (stripeAccountId) {
+                const finalReportsUrl = `https://activetopia-stripe-backe-9690d.web.app/reports.html?stripeAccountId=${stripeAccountId}`;
+                document.getElementById('redirectLink').href = finalReportsUrl;
+            } else {
+                document.getElementById('redirectLink').href = "https://activetopia-stripe-backe-9690d.web.app/error.html"; // Or your index.html
+            }
+        });
+    </script>
+</body>
+</html>
